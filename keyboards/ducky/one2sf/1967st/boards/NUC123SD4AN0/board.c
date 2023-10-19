@@ -50,8 +50,55 @@ void __early_init(void) {
     NUC123_clock_init();
 }
 
+#define SDI PB14
+#define LE PD3
+#define DCLK PD4
+
+static PWMConfig pwmCFG = {
+    2000000,  // 2 MHz
+    32768,    // 50% duty cycle
+    NULL,
+    {
+        {PWM_OUTPUT_ACTIVE_HIGH, NULL},  // Enable channel 0 (PA12)
+        {PWM_OUTPUT_DISABLED, NULL},
+        {PWM_OUTPUT_DISABLED, NULL},
+        {PWM_OUTPUT_DISABLED, NULL}
+    }
+};
+
 /**
  * @brief   Board-specific initialization code.
  * @todo    Add your board-specific code, if any.
  */
-void boardInit(void) {}
+void boardInit(void) {
+    // Disable all rows but row 0
+    PC4 = PAL_HIGH;
+    PC5 = PAL_LOW;
+    PB3 = PAL_LOW;
+    PB2 = PAL_LOW;
+    PD8 = PAL_LOW;
+
+    pwmStart(&PWMD1, &pwmCFG);
+
+    // Set all the registers to 0xFFFF
+    for (int j = 0; j < 48; j++) {
+        for (int i = 0; i < 16; i++) {
+            SDI = PAL_HIGH;
+
+            // Data latch
+            if (i == 0  && j != 47) {
+                LE = PAL_HIGH;
+            }
+
+            // Global latch (last data segment)
+            if (i == 2 && j == 47) {
+                LE = PAL_HIGH;
+            }
+
+            // Trigger clock
+            DCLK = PAL_HIGH;
+            DCLK = PAL_LOW;
+            LE = PAL_LOW;
+        }
+    }
+}
