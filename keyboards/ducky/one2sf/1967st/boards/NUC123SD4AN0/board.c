@@ -88,25 +88,40 @@ void boardInit(void) {
     pwmStart(&PWMD1, &pwmCFG);
     pwmEnableChannel(&PWMD1, 0, 2);
 
-    // Set all the registers to 0xFFFF
-    for (int j = 0; j < 48; j++) {
-        for (int i = 0; i < 16; i++) {
-            SDI = PAL_HIGH;
+    for (int i = 0; i < 16; i++) {
+        /* Inner Loop 16 */
+        for (int j = 0; j < 16; j++) {
 
-            // Data latch
-            if (i == 0  && j != 47) {
+            SDI_RED = PAL_HIGH;
+            SDI_GREEN = PAL_HIGH;
+            SDI_BLUE = PAL_HIGH;
+
+            // If j is 15 set LE High
+            if (j == 15) {
                 LE = PAL_HIGH;
             }
 
-            // Global latch (last data segment)
-            if (i == 2 && j == 47) {
-                LE = PAL_HIGH;
-            }
-
-            // Trigger clock
+            /* Cycle DCLK */
             DCLK = PAL_HIGH;
             DCLK = PAL_LOW;
-            LE = PAL_LOW;
+        } // Inner Loop 16
+
+        // LE Low
+        LE = PAL_LOW;
+    }
+
+    /* Send Global Latch */
+    for (int i = 0; i < 16; i++) {
+        /* Cycle DCLK */
+        DCLK = PAL_HIGH;
+        DCLK = PAL_LOW;
+
+        //  if i is 13 set LE high
+        if (i == 13) {
+            LE = PAL_HIGH;
         }
     }
+
+    // Reset LE Low
+    LE = PAL_LOW;
 }
