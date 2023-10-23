@@ -75,10 +75,10 @@ static PWMConfig pwmCFG = {
 void boardInit(void) {
     // Disable all rows but row 0
     PC4 = PAL_HIGH;
-    PC5 = PAL_HIGH;
-    PB3 = PAL_HIGH;
-    PB2 = PAL_HIGH;
-    PD8 = PAL_HIGH;
+    PC5 = PAL_LOW;
+    PB3 = PAL_LOW;
+    PB2 = PAL_LOW;
+    PD8 = PAL_LOW;
 
 
     // Enable the LED controllers
@@ -87,6 +87,41 @@ void boardInit(void) {
     pwmStart(&PWMD1, &pwmCFG);
     pwmEnableChannel(&PWMD1, 0, 50);  // 50% duty cycle
 
+    // Enable write configuration
+
+    LE = PAL_LOW;
+    DCLK = PAL_LOW;
+
+
+    DCLK = PAL_HIGH;
+    DCLK = PAL_LOW;
+
+    LE = PAL_HIGH;
+
+    for (int i = 0; i < 15; i++) {
+        DCLK = PAL_HIGH;
+        DCLK = PAL_LOW;
+    }
+
+    LE = PAL_LOW;
+
+    // Send config data
+    for (int i = 0; i < 16; i++) {
+        SDI_RED = PAL_LOW;
+        SDI_GREEN = PAL_LOW;
+        SDI_BLUE = PAL_LOW;
+
+        if (i == 5) {
+            LE = PAL_HIGH;
+        }
+
+        DCLK = PAL_HIGH;
+        DCLK = PAL_LOW;
+    }
+
+    LE = PAL_LOW;
+
+    // Set all leds to white
     for (int i = 0; i < 16; i++) {
         /* Inner Loop 16 */
         for (int j = 0; j < 16; j++) {
