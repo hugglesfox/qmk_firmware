@@ -55,14 +55,15 @@ void __early_init(void) {
 #define DCLK PD4
 
 static PWMConfig pwmCFG = {
-    2000000,  // 2 MHz
-    32768,    // 50% duty cycle
+    2400000,  // 24 MHz (divides nicely by 72 MHz which is the MCU clock freq)
+    1, // 50% duty cycle with a channel width of 2
+    // Therefore actual frequency will be 12MHz
     NULL,
     {
-        {PWM_OUTPUT_ACTIVE_HIGH, NULL},  // Enable channel 0 (PA12)
-        {PWM_OUTPUT_DISABLED, NULL},
-        {PWM_OUTPUT_DISABLED, NULL},
-        {PWM_OUTPUT_DISABLED, NULL}
+        {PWM_OUTPUT_ACTIVE_HIGH, NULL, NUC123_PWM_CH0_PIN_PA12},  // Enable channel 0 (PA12)
+        {PWM_OUTPUT_DISABLED, NULL, 0},
+        {PWM_OUTPUT_DISABLED, NULL, 0},
+        {PWM_OUTPUT_DISABLED, NULL, 0}
     }
 };
 
@@ -79,6 +80,7 @@ void boardInit(void) {
     PD8 = PAL_LOW;
 
     pwmStart(&PWMD1, &pwmCFG);
+    pwmEnableChannel(&PWMD1, 0, 2);
 
     // Set all the registers to 0xFFFF
     for (int j = 0; j < 48; j++) {
