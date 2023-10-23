@@ -50,7 +50,9 @@ void __early_init(void) {
     NUC123_clock_init();
 }
 
-#define SDI PB14
+#define SDI_RED PB14
+#define SDI_GREEN PB13
+#define SDI_BLUE PB12
 #define LE PD3
 #define DCLK PD4
 
@@ -74,10 +76,14 @@ static PWMConfig pwmCFG = {
 void boardInit(void) {
     // Disable all rows but row 0
     PC4 = PAL_HIGH;
-    PC5 = PAL_LOW;
-    PB3 = PAL_LOW;
-    PB2 = PAL_LOW;
-    PD8 = PAL_LOW;
+    PC5 = PAL_HIGH;
+    PB3 = PAL_HIGH;
+    PB2 = PAL_HIGH;
+    PD8 = PAL_HIGH;
+
+
+    // Enable the LED controllers
+    PD5 = PAL_LOW;
 
     pwmStart(&PWMD1, &pwmCFG);
     pwmEnableChannel(&PWMD1, 0, 2);
