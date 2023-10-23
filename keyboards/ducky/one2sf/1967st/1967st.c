@@ -53,45 +53,31 @@ static PWMConfig pwmCFG = {
     }
 };
 
-static void init(void) {
-    // Disable all rows but row 0
-    PC4 = PAL_HIGH;
-    PC5 = PAL_LOW;
-    PB3 = PAL_LOW;
-    PB2 = PAL_LOW;
-    PD8 = PAL_LOW;
+static void enable_configuration_mode(void) {
+    for (int i = 0; i < 16; i++) {
+        // Hold LE high for 15 DCLK cycles
+        if (i == 1) {
+            LE = PAL_HIGH;
+        }
 
-
-    // Enable the LED controllers
-    PD5 = PAL_LOW;
-
-    pwmStart(&PWMD1, &pwmCFG);
-    pwmEnableChannel(&PWMD1, 0, 50);  // 50% duty cycle
-
-    // Enable write configuration
-
-    LE = PAL_LOW;
-    DCLK = PAL_LOW;
-
-
-    DCLK = PAL_HIGH;
-    DCLK = PAL_LOW;
-
-    LE = PAL_HIGH;
-
-    for (int i = 0; i < 15; i++) {
         DCLK = PAL_HIGH;
         DCLK = PAL_LOW;
     }
 
     LE = PAL_LOW;
+}
+
+static void write_configuration(const short config) {
+    enable_configuration_mode();
 
     // Send config data
-    for (int i = 0; i < 16; i++) {
-        SDI_RED = PAL_LOW;
-        SDI_GREEN = PAL_LOW;
-        SDI_BLUE = PAL_LOW;
+    for (int i = 15; i >= 0; i--) {
+        int bit = config >> i & 1;
+        SDI_RED = bit;
+        SDI_GREEN = bit;
+        SDI_BLUE = bit;
 
+        // Hold LE high for 11 DCLK cycles
         if (i == 5) {
             LE = PAL_HIGH;
         }
@@ -101,6 +87,23 @@ static void init(void) {
     }
 
     LE = PAL_LOW;
+}
+
+static void init(void) {
+    // Disable all rows but row 0
+    PC4 = PAL_HIGH;
+    PC5 = PAL_LOW;
+    PB3 = PAL_LOW;
+    PB2 = PAL_LOW;
+    PD8 = PAL_LOW;
+
+    // Enable the LED controllers
+    PD5 = PAL_LOW;
+
+    pwmStart(&PWMD1, &pwmCFG);
+    pwmEnableChannel(&PWMD1, 0, 50);  // 50% duty cycle
+
+    write_configuration(0b0000001010110000);
 
     // Set all leds to white
     for (int i = 0; i < 16; i++) {
