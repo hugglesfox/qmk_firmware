@@ -58,8 +58,7 @@ void __early_init(void) {
 
 static PWMConfig pwmCFG = {
     2400000,  // 24 MHz (divides nicely by 72 MHz which is the MCU clock freq)
-    1, // 50% duty cycle with a channel width of 2
-    // Therefore actual frequency will be 12MHz
+    100,
     NULL,
     {
         {PWM_OUTPUT_ACTIVE_HIGH, NULL, NUC123_PWM_CH0_PIN_PA12},  // Enable channel 0 (PA12)
@@ -86,7 +85,7 @@ void boardInit(void) {
     PD5 = PAL_LOW;
 
     pwmStart(&PWMD1, &pwmCFG);
-    pwmEnableChannel(&PWMD1, 0, 2);
+    pwmEnableChannel(&PWMD1, 0, 50);  // 50% duty cycle
 
     for (int i = 0; i < 16; i++) {
         /* Inner Loop 16 */
