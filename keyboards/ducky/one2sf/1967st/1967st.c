@@ -18,13 +18,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "quantum.h"
 #include "hal.h"
 
-#ifdef RGB_MATRIX_ENABLE
+// #ifdef RGB_MATRIX_ENABLE
 
 #define SDI_RED PB14
 #define SDI_GREEN PB13
 #define SDI_BLUE PB12
 #define LE PD3
 #define DCLK PD4
+
+#define ROW_0_LED_COUNT 15
+#define ROW_1_LED_COUNT 15
+#define ROW_2_LED_COUNT 14
+#define ROW_3_LED_COUNT 12
+#define ROW_4_LED_COUNT 12
 
 // FIXME: Replace this with the actual keyboard config
 led_config_t g_led_config = { {
@@ -41,9 +47,13 @@ led_config_t g_led_config = { {
   1, 4, 4, 4, 4, 1
 } };
 
+static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
+
+static uint16_t led_data[5 * 16 * 3] = {0};
+
 static PWMConfig pwmCFG = {
     2400000,  // 24 MHz (divides nicely by 72 MHz which is the MCU clock freq)
-    100,
+    10,
     NULL,
     {
         {PWM_OUTPUT_ACTIVE_HIGH, NULL, NUC123_PWM_CH0_PIN_PA12},  // Enable channel 0 (PA12)
@@ -89,7 +99,96 @@ static void write_configuration(const short config) {
     LE = PAL_LOW;
 }
 
+// static int set_row(const int row, const int v) {
+//     int val = v & 1;
+//     switch (row) {
+//     case 0:
+//         PC4 = val;
+//         return ROW_0_LED_COUNT;
+//     case 1:
+//         PC5 = val;
+//         return ROW_1_LED_COUNT;
+//     case 2:
+//         PB3 = val;
+//         return ROW_2_LED_COUNT;
+//     case 3:
+//         PB2 = val;
+//         return ROW_3_LED_COUNT;
+//     case 4:
+//         PB8 = val;
+//         return ROW_4_LED_COUNT;
+//     default:
+//         return -1;
+//     }
+// }
+
+static void flush(void) {}
+
+static void set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {
+    color_data[index][0] = red;
+    color_data[index][1] = green;
+    color_data[index][2] = blue;
+}
+
+static void set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
+    for (int i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+        color_data[i][0] = red;
+        color_data[i][1] = green;
+        color_data[i][2] = blue;
+    }
+}
+
+static void update_leds(void) {
+    // Enable the row
+    // int led_count = set_row(0, PAL_HIGH);
+
+    // 16 bits per led
+    for (int i = 0; i < 16; i++) {
+        // MSB first
+        // SDI_RED = led_data[led] >> j & 1;
+        // led++;
+        // SDI_GREEN = led_data[led] >> j & 1;
+        // led++;
+        // SDI_BLUE = led_data[led] >> j & 1;
+        // led++;
+
+        SDI_RED = PAL_HIGH;
+        // SDI_GREEN = PAL_HIGH;
+        // SDI_BLUE = PAL_HIGH;
+
+        // Hold LE high for 1 clock cycle to latch data
+        if (i == 15) {
+            LE = PAL_HIGH;
+        }
+
+        DCLK = PAL_HIGH;
+        DCLK = PAL_LOW;
+    }
+
+    LE = PAL_LOW;
+
+    SDI_RED = PAL_LOW;
+    // SDI_GREEN = PAL_LOW;
+    // SDI_BLUE = PAL_LOW;
+
+    // Global latch to enable LEDS
+    for (int i = 0; i < 16; i++) {
+        // Hold LE high for 3 DCLK cycles
+        if (i == 13) {
+            LE = PAL_HIGH;
+        }
+
+        DCLK = PAL_HIGH;
+        DCLK = PAL_LOW;
+    }
+    // Reset LE Low
+    LE = PAL_LOW;
+}
+
 static void init(void) {
+    // Disable LED controllers
+    PD5 = PAL_HIGH;
+
     // Disable all rows but row 0
     PC4 = PAL_HIGH;
     PC5 = PAL_LOW;
@@ -97,58 +196,26 @@ static void init(void) {
     PB2 = PAL_LOW;
     PD8 = PAL_LOW;
 
+    // Reset all data lines
+    LE = PAL_LOW;
+    DCLK = PAL_LOW;
+    SDI_RED = PAL_LOW;
+    SDI_GREEN = PAL_LOW;
+    SDI_BLUE = PAL_LOW;
+
+    pwmStart(&PWMD1, &pwmCFG);
+    pwmEnableChannel(&PWMD1, 0, 5);  // 50% duty cycle
+
     // Enable the LED controllers
     PD5 = PAL_LOW;
 
-    pwmStart(&PWMD1, &pwmCFG);
-    pwmEnableChannel(&PWMD1, 0, 50);  // 50% duty cycle
+    write_configuration(0b1000010000000000u);
 
-    write_configuration(0b0000001010110000);
+    led_data[0] = 0xFFFF;
 
-    // Set all leds to white
-    for (int i = 0; i < 16; i++) {
-        /* Inner Loop 16 */
-        for (int j = 0; j < 16; j++) {
-
-            SDI_RED = PAL_HIGH;
-            SDI_GREEN = PAL_HIGH;
-            SDI_BLUE = PAL_HIGH;
-
-            // If j is 15 set LE High
-            if (j == 15) {
-                LE = PAL_HIGH;
-            }
-
-            /* Cycle DCLK */
-            DCLK = PAL_HIGH;
-            DCLK = PAL_LOW;
-        } // Inner Loop 16
-
-        // LE Low
-        LE = PAL_LOW;
-    }
-
-    /* Send Global Latch */
-    for (int i = 0; i < 16; i++) {
-        /* Cycle DCLK */
-        DCLK = PAL_HIGH;
-        DCLK = PAL_LOW;
-
-        //  if i is 13 set LE high
-        if (i == 13) {
-            LE = PAL_HIGH;
-        }
-    }
-
-    // Reset LE Low
-    LE = PAL_LOW;
+    update_leds();
 }
 
-static void flush(void) {}
-
-static void set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {}
-
-static void set_color_all(uint8_t red, uint8_t green, uint8_t blue) {}
 
 const rgb_matrix_driver_t rgb_matrix_driver = {
     .init = init,
@@ -157,4 +224,4 @@ const rgb_matrix_driver_t rgb_matrix_driver = {
     .set_color_all = set_color_all
 };
 
-#endif // RGB_MATRIX_ENABLE
+// #endif // RGB_MATRIX_ENABLE
