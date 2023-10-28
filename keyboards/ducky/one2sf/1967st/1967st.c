@@ -51,136 +51,48 @@ static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
 static uint16_t led_data[5 * 16 * 3] = {0};
 
-static PWMConfig pwmCFG = {
-    2400000,  // 24 MHz (divides nicely by 72 MHz which is the MCU clock freq)
-    10,
-    NULL,
-    {
-        {PWM_OUTPUT_ACTIVE_HIGH, NULL, NUC123_PWM_CH0_PIN_PA12},  // Enable channel 0 (PA12)
-        {PWM_OUTPUT_DISABLED, NULL, 0},
-        {PWM_OUTPUT_DISABLED, NULL, 0},
-        {PWM_OUTPUT_DISABLED, NULL, 0}
-    }
-};
+static void setup_pwm(void) {
+    // Use the HCLK
+    CLK->CLKSEL1 &= ~CLK_CLKSEL1_PWM01_S_Msk;
+    CLK->CLKSEL1 |= 2 << CLK_CLKSEL1_PWM01_S_Pos;
 
-static void pulse_dclk(void) {
-    DCLK = PAL_HIGH;
-    DCLK = PAL_LOW;
+    CLK->CLKSEL2 &= ~CLK_CLKSEL2_PWM01_S_E_Msk;
+    CLK->CLKSEL2 |= 2 << CLK_CLKSEL2_PWM01_S_E_Pos;
+
+    CLK->CLKSEL1 &= ~CLK_CLKSEL1_PWM23_S_Msk;
+    CLK->CLKSEL1 |= 2 << CLK_CLKSEL1_PWM23_S_Pos;
+
+    CLK->CLKSEL2 &= ~CLK_CLKSEL2_PWM23_S_E_Msk;
+    CLK->CLKSEL2 |= 2 << CLK_CLKSEL2_PWM23_S_E_Pos;
+
+    // Enable the PWM peripheral clock
+    CLK->APBCLK |= (1 << CLK_APBCLK_PWM01_EN_Pos | 1 << CLK_APBCLK_PWM23_EN_Pos);
+
+    // Set clock division to 1
+    PWMA->CSR = (4 << PWM_CSR_CSR0_Pos) | (4 << PWM_CSR_CSR1_Pos) |
+                (4 << PWM_CSR_CSR2_Pos) | (4 << PWM_CSR_CSR3_Pos);
 }
 
-// static void enable_configuration_mode(void) {
-//     pulse_dclk();
-//     LE = PAL_HIGH;
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     pulse_dclk();
-//     DCLK = PAL_HIGH;
-//     LE = PAL_LOW;
-//     DCLK = PAL_LOW;
-// }
+// PWM channel 0
+static void setup_gclk(void) {
+    // Set pin PA12 to PWM CH0
+    SYS->GPA_MFP |= 1 << 12;
 
-// static void write_configuration(const short config) {
-//     enable_configuration_mode();
+    // Set prescaler to 1
+    PWMA->PPR = 1 << PWM_PPR_CP01_Pos;
 
+    // Enable auto reload and start channel 0
+    PWMA->PCR |= 1 << PWM_PCR_CH0MOD_Pos;
 
-// }
+    // Set freq to 9MHz and 50% duty cycle (it's just a nice clock)
+    //
+    // PWMnm_CLK/[(prescale+1)*(clock divider)*(CNR+1)]
+    // 72MHz/(1 + 1)*(1)*(3+1)
+    PWMA->CNR0 = 3;
+    PWMA->CMR0 = 1;
 
-// static int set_row(const int row, const int v) {
-//     int val = v & 1;
-//     switch (row) {
-//     case 0:
-//         PC4 = val;
-//         return ROW_0_LED_COUNT;
-//     case 1:
-//         PC5 = val;
-//         return ROW_1_LED_COUNT;
-//     case 2:
-//         PB3 = val;
-//         return ROW_2_LED_COUNT;
-//     case 3:
-//         PB2 = val;
-//         return ROW_3_LED_COUNT;
-//     case 4:
-//         PB8 = val;
-//         return ROW_4_LED_COUNT;
-//     default:
-//         return -1;
-//     }
-// }
-
-static void flush(void) {}
-
-static void set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {
-    color_data[index][0] = red;
-    color_data[index][1] = green;
-    color_data[index][2] = blue;
-}
-
-static void set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
-    for (int i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
-        color_data[i][0] = red;
-        color_data[i][1] = green;
-        color_data[i][2] = blue;
-    }
-}
-
-static void update_leds(void) {
-    SDI_RED = PAL_HIGH;
-    // SDI_GREEN = PAL_HIGH;
-    // SDI_BLUE = PAL_HIGH;
-
-    for (int port = 0; port < 15; port++) {
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        pulse_dclk();
-        LE = PAL_HIGH;
-        DCLK = PAL_HIGH;
-        LE = PAL_LOW;
-        DCLK = PAL_LOW;
-    }
-
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    pulse_dclk();
-    LE = PAL_HIGH;
-    pulse_dclk();
-    pulse_dclk();
-    LE = PAL_HIGH;
-    DCLK = PAL_HIGH;
-    LE = PAL_LOW;
-    DCLK = PAL_LOW;
+    // Start PWM channel 0
+    PWMA->PCR |= 1 << PWM_PCR_CH0EN_Pos;
 }
 
 static void init(void) {
@@ -201,8 +113,9 @@ static void init(void) {
     SDI_GREEN = PAL_LOW;
     SDI_BLUE = PAL_LOW;
 
-    pwmStart(&PWMD1, &pwmCFG);
-    pwmEnableChannel(&PWMD1, 0, 5);  // 50% duty cycle
+    // Setup pwm to prescaled 2MHz
+    setup_pwm();
+    setup_gclk();
 
     // Enable the LED controllers
     PD5 = PAL_LOW;
@@ -210,10 +123,23 @@ static void init(void) {
     // write_configuration(0b1000010000000000u);
 
     led_data[0] = 0xFFFF;
-
-    update_leds();
 }
 
+static void flush(void) {}
+
+static void set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {
+    color_data[index][0] = red;
+    color_data[index][1] = green;
+    color_data[index][2] = blue;
+}
+
+static void set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
+    for (int i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+        color_data[i][0] = red;
+        color_data[i][1] = green;
+        color_data[i][2] = blue;
+    }
+}
 
 const rgb_matrix_driver_t rgb_matrix_driver = {
     .init = init,
