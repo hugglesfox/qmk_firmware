@@ -63,41 +63,38 @@ static PWMConfig pwmCFG = {
     }
 };
 
-static void enable_configuration_mode(void) {
-    for (int i = 0; i < 16; i++) {
-        // Hold LE high for 15 DCLK cycles
-        if (i == 1) {
-            LE = PAL_HIGH;
-        }
-
-        DCLK = PAL_HIGH;
-        DCLK = PAL_LOW;
-    }
-
-    LE = PAL_LOW;
+static void pulse_dclk(void) {
+    DCLK = PAL_HIGH;
+    DCLK = PAL_LOW;
 }
 
-static void write_configuration(const short config) {
-    enable_configuration_mode();
+// static void enable_configuration_mode(void) {
+//     pulse_dclk();
+//     LE = PAL_HIGH;
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     pulse_dclk();
+//     DCLK = PAL_HIGH;
+//     LE = PAL_LOW;
+//     DCLK = PAL_LOW;
+// }
 
-    // Send config data
-    for (int i = 15; i >= 0; i--) {
-        int bit = config >> i & 1;
-        SDI_RED = bit;
-        SDI_GREEN = bit;
-        SDI_BLUE = bit;
+// static void write_configuration(const short config) {
+//     enable_configuration_mode();
 
-        // Hold LE high for 11 DCLK cycles
-        if (i == 5) {
-            LE = PAL_HIGH;
-        }
 
-        DCLK = PAL_HIGH;
-        DCLK = PAL_LOW;
-    }
-
-    LE = PAL_LOW;
-}
+// }
 
 // static int set_row(const int row, const int v) {
 //     int val = v & 1;
@@ -139,50 +136,51 @@ static void set_color_all(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 static void update_leds(void) {
-    // Enable the row
-    // int led_count = set_row(0, PAL_HIGH);
+    SDI_RED = PAL_HIGH;
+    // SDI_GREEN = PAL_HIGH;
+    // SDI_BLUE = PAL_HIGH;
 
-    // 16 bits per led
-    for (int i = 0; i < 16; i++) {
-        // MSB first
-        // SDI_RED = led_data[led] >> j & 1;
-        // led++;
-        // SDI_GREEN = led_data[led] >> j & 1;
-        // led++;
-        // SDI_BLUE = led_data[led] >> j & 1;
-        // led++;
-
-        SDI_RED = PAL_HIGH;
-        // SDI_GREEN = PAL_HIGH;
-        // SDI_BLUE = PAL_HIGH;
-
-        // Hold LE high for 1 clock cycle to latch data
-        if (i == 15) {
-            LE = PAL_HIGH;
-        }
-
+    for (int port = 0; port < 15; port++) {
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        pulse_dclk();
+        LE = PAL_HIGH;
         DCLK = PAL_HIGH;
+        LE = PAL_LOW;
         DCLK = PAL_LOW;
     }
 
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    pulse_dclk();
+    LE = PAL_HIGH;
+    pulse_dclk();
+    pulse_dclk();
+    LE = PAL_HIGH;
+    DCLK = PAL_HIGH;
     LE = PAL_LOW;
-
-    SDI_RED = PAL_LOW;
-    // SDI_GREEN = PAL_LOW;
-    // SDI_BLUE = PAL_LOW;
-
-    // Global latch to enable LEDS
-    for (int i = 0; i < 16; i++) {
-        // Hold LE high for 3 DCLK cycles
-        if (i == 13) {
-            LE = PAL_HIGH;
-        }
-
-        DCLK = PAL_HIGH;
-        DCLK = PAL_LOW;
-    }
-    // Reset LE Low
-    LE = PAL_LOW;
+    DCLK = PAL_LOW;
 }
 
 static void init(void) {
@@ -209,7 +207,7 @@ static void init(void) {
     // Enable the LED controllers
     PD5 = PAL_LOW;
 
-    write_configuration(0b1000010000000000u);
+    // write_configuration(0b1000010000000000u);
 
     led_data[0] = 0xFFFF;
 
