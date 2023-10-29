@@ -53,6 +53,8 @@ static uint16_t led_data[5 * 16 * 3] = {0};
 
 static void setup_pwm(void) {
     // Use the HCLK
+    // Note we need to 0 the bits first as the clksel register has a reset value
+    // of 0xFFFF_FFFF
     CLK->CLKSEL1 &= ~CLK_CLKSEL1_PWM01_S_Msk;
     CLK->CLKSEL1 |= 2 << CLK_CLKSEL1_PWM01_S_Pos;
 
@@ -68,31 +70,75 @@ static void setup_pwm(void) {
     // Enable the PWM peripheral clock
     CLK->APBCLK |= (1 << CLK_APBCLK_PWM01_EN_Pos | 1 << CLK_APBCLK_PWM23_EN_Pos);
 
-    // Set clock division to 1
-    PWMA->CSR = (4 << PWM_CSR_CSR0_Pos) | (4 << PWM_CSR_CSR1_Pos) |
-                (4 << PWM_CSR_CSR2_Pos) | (4 << PWM_CSR_CSR3_Pos);
+    // Enable PWM interrupt vector
+    nvicEnableVector(NUC123_PWMA_NUMBER, NUC123_PWM_IRQ_PRIORITY);
 }
 
 // PWM channel 0
 static void setup_gclk(void) {
+    // Set clock division to 1
+    PWMA->CSR |= 4 << PWM_CSR_CSR0_Pos;
+
     // Set pin PA12 to PWM CH0
     SYS->GPA_MFP |= 1 << 12;
 
-    // Set prescaler to 1
-    PWMA->PPR = 1 << PWM_PPR_CP01_Pos;
+    // Enable channel 0 output
+    PWMA->POE |= 1 << PWM_POE_PWM0_Pos;
 
-    // Enable auto reload and start channel 0
+    // Set prescaler to 1
+    PWMA->PPR |= 1 << PWM_PPR_CP01_Pos;
+
+    // Enable auto reload
     PWMA->PCR |= 1 << PWM_PCR_CH0MOD_Pos;
 
     // Set freq to 9MHz and 50% duty cycle (it's just a nice clock)
     //
-    // PWMnm_CLK/[(prescale+1)*(clock divider)*(CNR+1)]
+    // freq = HCLK/[(prescale+1)*(clock divider)*(CNR+1)]
     // 72MHz/(1 + 1)*(1)*(3+1)
+    //
+    // duty = (CMR+1)/(CNR+1)
+    // (1+1)/(3+1)
     PWMA->CNR0 = 3;
     PWMA->CMR0 = 1;
 
     // Start PWM channel 0
     PWMA->PCR |= 1 << PWM_PCR_CH0EN_Pos;
+}
+
+// PWM channel 2
+static void setup_dclk(void) {
+    // Set clock division to 1
+    PWMA->CSR |= 4 << PWM_CSR_CSR0_Pos;
+
+    // Set prescaler to 255
+    PWMA->PPR |= 0xFF << PWM_PPR_CP23_Pos;
+
+    // Enable duty and reset interrupts
+    PWMA->PIER |= (1 << PWM_PIER_PWMDIE2_Pos) | (1 << PWM_PIER_PWMIE2_Pos);
+
+    // Enable auto reload
+    PWMA->PCR |= 1 << PWM_PCR_CH2MOD_Pos;
+
+    // Set freq to 70kHz and 50% duty cycle (it's just a nice clock)
+    //
+    // freq = HCLK/[(prescale+1)*(clock divider)*(CNR+1)]
+    // 72MHz/(255 + 1)*(1)*(3+1)
+    //
+    // duty = (CMR+1)/(CNR+1)
+    // (1+1)/(3+1)
+    PWMA->CNR2 = 3;
+    PWMA->CMR2 = 1;
+
+    // Start PWM channel 2
+    PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
+}
+
+OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
+    OSAL_IRQ_PROLOGUE();
+
+
+
+    OSAL_IRQ_EPILOGUE();
 }
 
 static void init(void) {
@@ -116,6 +162,7 @@ static void init(void) {
     // Setup pwm to prescaled 2MHz
     setup_pwm();
     setup_gclk();
+    setup_dclk();
 
     // Enable the LED controllers
     PD5 = PAL_LOW;
