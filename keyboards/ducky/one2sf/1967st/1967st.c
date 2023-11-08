@@ -52,13 +52,14 @@ led_config_t g_led_config = { {
 
 static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
-// 16 led channels + 1 for global latch per row
-static uint16_t sdi_red_buf[17];
-static uint16_t sdi_green_buf[17];
-static uint16_t sdi_blue_buf[17];
+// 5 rows, 16 led channels + 1 for global latch per row
+static uint16_t sdi_red_buf[5][17];
+static uint16_t sdi_green_buf[5][17];
+static uint16_t sdi_blue_buf[5][17];
 
 // Takes 272 pulses to clock in all the data
 static uint16_t dclk_pulse_count = 0;
+static uint8_t current_row = 0;
 
 static void setup_pwm(void) {
     // Use the HCLK
@@ -143,6 +144,40 @@ static void setup_dclk(void) {
     PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
 }
 
+static void select_row(int row) {
+    // Disable all rows
+    PC4 = PAL_LOW;
+    PC5 = PAL_LOW;
+    PB3 = PAL_LOW;
+    PB2 = PAL_LOW;
+    PD8 = PAL_LOW;
+
+    switch(row) {
+        case -1:
+        return;
+
+        case 0:
+        PC4 = PAL_HIGH;
+        return;
+
+        case 1:
+        PC5 = PAL_HIGH;
+        return;
+
+        case 2:
+        PB3 = PAL_HIGH;
+        return;
+
+        case 3:
+        PB2 = PAL_HIGH;
+        return;
+
+        case 4:
+        PD8 = PAL_HIGH;
+        return;
+    }
+}
+
 OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
     OSAL_IRQ_PROLOGUE();
 
@@ -152,9 +187,9 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
         uint8_t clk_cycle = dclk_pulse_count % 16;
         uint8_t msb_idx = 15 - clk_cycle;
 
-        SDI_RED = (sdi_red_buf[led_idx] >> msb_idx) & 1;
-        SDI_GREEN = (sdi_green_buf[led_idx] >> msb_idx) & 1;
-        SDI_BLUE = (sdi_blue_buf[led_idx] >> msb_idx) & 1;
+        SDI_RED = (sdi_red_buf[current_row][led_idx] >> msb_idx) & 1;
+        SDI_GREEN = (sdi_green_buf[current_row][led_idx] >> msb_idx) & 1;
+        SDI_BLUE = (sdi_blue_buf[current_row][led_idx] >> msb_idx) & 1;
 
         LE = (led_idx == 16 && clk_cycle > 12) || clk_cycle > 14;
     }
@@ -179,12 +214,8 @@ static void init(void) {
     // Disable LED controllers
     PD5 = PAL_HIGH;
 
-    // Disable all rows but row 0
-    PC4 = PAL_HIGH;
-    PC5 = PAL_LOW;
-    PB3 = PAL_LOW;
-    PB2 = PAL_LOW;
-    PD8 = PAL_LOW;
+    // Disable all rows
+    select_row(0);
 
     // Reset all data lines
     LE = PAL_LOW;
@@ -193,7 +224,6 @@ static void init(void) {
     SDI_GREEN = PAL_LOW;
     SDI_BLUE = PAL_LOW;
 
-    // Setup pwm to prescaled 2MHz
     setup_pwm();
     setup_gclk();
     setup_dclk();
@@ -202,7 +232,7 @@ static void init(void) {
     PD5 = PAL_LOW;
 
     // write_configuration(0b1000010000000000u);
-    sdi_red_buf[0] = 0xFFFF;
+    sdi_red_buf[0][0] = 0xFFFF;
 }
 
 static void flush(void) {}
