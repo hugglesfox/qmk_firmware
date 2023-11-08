@@ -47,12 +47,18 @@ led_config_t g_led_config = { {
   1, 4, 4, 4, 4, 1
 } };
 
+#define DATA_LATCH 1
+#define GLOBAL_LATCH 7
+
 static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
-static uint16_t led_data[5 * 16 * 3] = {0};
+static uint16_t sdi_red_buf[17];
+static uint16_t sdi_green_buf[17];
+static uint16_t sdi_blue_buf[17];
+static uint16_t le_buf[17];
 
-static uint8_t dclk_transition_count = 0;
-static uint8_t test_counter = 0;
+// Takes 272 pulses to clock in all the data
+static uint16_t dclk_pulse_count = 0;
 
 static void setup_pwm(void) {
     // Use the HCLK
@@ -141,24 +147,16 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
     OSAL_IRQ_PROLOGUE();
 
     // channel 2 duty interrupt
-    if ((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1) {
-        SDI_RED = 1;
-        SDI_GREEN = 1;
-        SDI_BLUE = 1;
+    if ((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1 & ~DCLK) {
+        uint8_t led_idx = dclk_pulse_count / 16;
+        uint8_t clk_cycle = dclk_pulse_count % 16;
+        uint8_t msb_idx = 15 - clk_cycle;
 
-        if (dclk_transition_count == 26 && test_counter == 16) {
-            LE = PAL_HIGH;
-            test_counter = 0;
-        }
+        SDI_RED = (sdi_red_buf[led_idx] >> msb_idx) & 1;
+        SDI_GREEN = (sdi_green_buf[led_idx] >> msb_idx) & 1;
+        SDI_BLUE = (sdi_blue_buf[led_idx] >> msb_idx) & 1;
 
-        if (dclk_transition_count == 30) {
-            LE = PAL_HIGH;
-        }
-
-        if (dclk_transition_count == 31) {
-            LE = PAL_LOW;
-            test_counter++;
-        }
+        LE = (le_buf[led_idx] >> msb_idx) & 1;
     }
 
     // channel 2 underflow interrupt
@@ -166,11 +164,12 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
         // Toggle dclk
         DCLK ^= 1;
 
-        // count each clock transition for a packet [0,31]
-        dclk_transition_count++;
-        dclk_transition_count &= 0x1F;
+        // count each clock pulse [0,271]
+        dclk_pulse_count += 1 & DCLK;
+        dclk_pulse_count %= 272;
     }
 
+    // Reset interrupt flags
     PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos);
 
     OSAL_IRQ_EPILOGUE();
@@ -203,8 +202,13 @@ static void init(void) {
     PD5 = PAL_LOW;
 
     // write_configuration(0b1000010000000000u);
+    sdi_red_buf[14] = 0xFFFF;
 
-    led_data[0] = 0xFFFF;
+    for (int i = 0; i < 16; i++) {
+        le_buf[i] = DATA_LATCH;
+    }
+
+    le_buf[16] = GLOBAL_LATCH;
 }
 
 static void flush(void) {}
