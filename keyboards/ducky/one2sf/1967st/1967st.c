@@ -51,6 +51,8 @@ static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
 static uint16_t led_data[5 * 16 * 3] = {0};
 
+static uint8_t dclk_no = 0;
+
 static void setup_pwm(void) {
     // Use the HCLK
     // Note we need to 0 the bits first as the clksel register has a reset value
@@ -71,7 +73,8 @@ static void setup_pwm(void) {
     CLK->APBCLK |= (1 << CLK_APBCLK_PWM01_EN_Pos | 1 << CLK_APBCLK_PWM23_EN_Pos);
 
     // Enable PWM interrupt vector
-    nvicEnableVector(NUC123_PWMA_NUMBER, NUC123_PWM_IRQ_PRIORITY);
+    // Interrupt priority value taken from chibios defaults
+    nvicEnableVector(NUC123_PWMA_NUMBER, 3);
 }
 
 // PWM channel 0
@@ -108,7 +111,7 @@ static void setup_gclk(void) {
 // PWM channel 2
 static void setup_dclk(void) {
     // Set clock division to 1
-    PWMA->CSR |= 4 << PWM_CSR_CSR0_Pos;
+    PWMA->CSR |= 3 << PWM_CSR_CSR0_Pos;
 
     // Set prescaler to 255
     PWMA->PPR |= 0xFF << PWM_PPR_CP23_Pos;
@@ -126,8 +129,8 @@ static void setup_dclk(void) {
     //
     // duty = (CMR+1)/(CNR+1)
     // (1+1)/(3+1)
-    PWMA->CNR2 = 3;
-    PWMA->CMR2 = 1;
+    PWMA->CNR2 = 0xFF;
+    PWMA->CMR2 = 0xF;
 
     // Start PWM channel 2
     PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
@@ -136,7 +139,35 @@ static void setup_dclk(void) {
 OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
     OSAL_IRQ_PROLOGUE();
 
+    // channel 2 duty interrupt
+    if ((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1) {
+        SDI_RED = PAL_HIGH;
 
+        if (~DCLK && (dclk_no + 1) % 15 == 0) {
+            LE = PAL_HIGH;
+        }
+
+        if (~DCLK && (dclk_no + 1) == 253) {
+            LE = PAL_HIGH;
+        }
+
+        if (DCLK && (dclk_no + 1) % 16 == 0) {
+            LE = PAL_LOW;
+        }
+    }
+
+    // channel 2 underflow interrupt
+    if ((PWMA->PIIR >> PWM_PIIR_PWMIF2_Pos) & 1) {
+        // Toggle dclk
+        DCLK ^= 1;
+
+        // Increment dclk_no on each high
+        if (DCLK) {
+            dclk_no++;
+        }
+    }
+
+    PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos);
 
     OSAL_IRQ_EPILOGUE();
 }
