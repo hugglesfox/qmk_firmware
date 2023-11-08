@@ -80,24 +80,27 @@ static void setup_pwm(void) {
     // Enable the PWM peripheral clock
     CLK->APBCLK |= (1 << CLK_APBCLK_PWM01_EN_Pos | 1 << CLK_APBCLK_PWM23_EN_Pos);
 
+    // Set prescaler for PWM0 and PWM1 to 1
+    PWMA->PPR |= 1 << PWM_PPR_CP01_Pos;
+
+    // Set prescaler to for PWM2 and PWM3 to 255
+    PWMA->PPR |= 0xFF << PWM_PPR_CP23_Pos;
+
     // Enable PWM interrupt vector
     // Interrupt priority value taken from chibios defaults
     nvicEnableVector(NUC123_PWMA_NUMBER, 3);
 }
 
-// PWM channel 0
+// PWM channel 0, used to run the GCLK on PA12
 static void setup_gclk(void) {
     // Set clock division to 1
-    PWMA->CSR |= 4 << PWM_CSR_CSR0_Pos;
+    PWMA->CSR |= 4 << PWM_CSR_CSR2_Pos;
 
     // Set pin PA12 to PWM CH0
     SYS->GPA_MFP |= 1 << 12;
 
     // Enable channel 0 output
     PWMA->POE |= 1 << PWM_POE_PWM0_Pos;
-
-    // Set prescaler to 1
-    PWMA->PPR |= 1 << PWM_PPR_CP01_Pos;
 
     // Enable auto reload
     PWMA->PCR |= 1 << PWM_PCR_CH0MOD_Pos;
@@ -116,13 +119,10 @@ static void setup_gclk(void) {
     PWMA->PCR |= 1 << PWM_PCR_CH0EN_Pos;
 }
 
-// PWM channel 2
+// PWM channel 2, used for DCLK and SDI timing
 static void setup_dclk(void) {
     // Set clock division to 1
-    PWMA->CSR |= 3 << PWM_CSR_CSR0_Pos;
-
-    // Set prescaler to 255
-    PWMA->PPR |= 0xFF << PWM_PPR_CP23_Pos;
+    PWMA->CSR |= 4 << PWM_CSR_CSR2_Pos;
 
     // Enable duty and reset interrupts
     PWMA->PIER |= (1 << PWM_PIER_PWMDIE2_Pos) | (1 << PWM_PIER_PWMIE2_Pos);
@@ -142,6 +142,27 @@ static void setup_dclk(void) {
 
     // Start PWM channel 2
     PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
+}
+
+// PWM channel 3, used for LED row selection timing
+static void setup_row_clk(void) {
+    // Set clock division to 16
+    PWMA->CSR |= 3 << PWM_CSR_CSR3_Pos;
+
+    // Enable reset interrupt
+    PWMA->PIER |= 1 << PWM_PIER_PWMIE3_Pos;
+
+    // Enable auto reload
+    PWMA->PCR |= 1 << PWM_PCR_CH3MOD_Pos;
+
+    // Set freq to 70kHz and duty cycle doesn't matter
+    //
+    // freq = HCLK/[(prescale+1)*(clock divider)*(CNR+1)]
+    PWMA->CNR3 = 0xFF;
+    PWMA->CMR3 = 1;
+
+    // Start PWM channel 3
+    PWMA->PCR |= 1 << PWM_PCR_CH3EN_Pos;
 }
 
 static void select_row(int row) {
@@ -204,8 +225,15 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
         dclk_pulse_count %= 272;
     }
 
+    // channel 3 underflow interrupt
+    if ((PWMA->PIIR >> PWM_PIIR_PWMIF3_Pos) & 1) {
+        current_row++;
+        current_row %= 5;
+        select_row(current_row);
+    }
+
     // Reset interrupt flags
-    PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos);
+    PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos) | (1 << PWM_PIIR_PWMIF3_Pos);
 
     OSAL_IRQ_EPILOGUE();
 }
@@ -227,12 +255,17 @@ static void init(void) {
     setup_pwm();
     setup_gclk();
     setup_dclk();
+    setup_row_clk();
 
     // Enable the LED controllers
     PD5 = PAL_LOW;
 
     // write_configuration(0b1000010000000000u);
     sdi_red_buf[0][0] = 0xFFFF;
+    // sdi_red_buf[1][1] = 0xFFFF;
+    // sdi_red_buf[2][2] = 0xFFFF;
+    // sdi_red_buf[3][3] = 0xFFFF;
+    // sdi_red_buf[4][4] = 0xFFFF;
 }
 
 static void flush(void) {}
