@@ -51,7 +51,8 @@ static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
 static uint16_t led_data[5 * 16 * 3] = {0};
 
-static uint8_t dclk_no = 0;
+static uint8_t dclk_transition_count = 0;
+static uint8_t test_counter = 0;
 
 static void setup_pwm(void) {
     // Use the HCLK
@@ -130,7 +131,7 @@ static void setup_dclk(void) {
     // duty = (CMR+1)/(CNR+1)
     // (1+1)/(3+1)
     PWMA->CNR2 = 0xFF;
-    PWMA->CMR2 = 0xF;
+    PWMA->CMR2 = 0x7F;
 
     // Start PWM channel 2
     PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
@@ -141,18 +142,22 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
 
     // channel 2 duty interrupt
     if ((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1) {
-        SDI_RED = PAL_HIGH;
+        SDI_RED = 1;
+        SDI_GREEN = 1;
+        SDI_BLUE = 1;
 
-        if (~DCLK && (dclk_no + 1) % 15 == 0) {
+        if (dclk_transition_count == 26 && test_counter == 16) {
+            LE = PAL_HIGH;
+            test_counter = 0;
+        }
+
+        if (dclk_transition_count == 30) {
             LE = PAL_HIGH;
         }
 
-        if (~DCLK && (dclk_no + 1) == 253) {
-            LE = PAL_HIGH;
-        }
-
-        if (DCLK && (dclk_no + 1) % 16 == 0) {
+        if (dclk_transition_count == 31) {
             LE = PAL_LOW;
+            test_counter++;
         }
     }
 
@@ -161,10 +166,9 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
         // Toggle dclk
         DCLK ^= 1;
 
-        // Increment dclk_no on each high
-        if (DCLK) {
-            dclk_no++;
-        }
+        // count each clock transition for a packet [0,31]
+        dclk_transition_count++;
+        dclk_transition_count &= 0x1F;
     }
 
     PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos);
