@@ -52,10 +52,10 @@ led_config_t g_led_config = { {
 
 static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
+// 16 led channels + 1 for global latch per row
 static uint16_t sdi_red_buf[17];
 static uint16_t sdi_green_buf[17];
 static uint16_t sdi_blue_buf[17];
-static uint16_t le_buf[17];
 
 // Takes 272 pulses to clock in all the data
 static uint16_t dclk_pulse_count = 0;
@@ -156,7 +156,7 @@ OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
         SDI_GREEN = (sdi_green_buf[led_idx] >> msb_idx) & 1;
         SDI_BLUE = (sdi_blue_buf[led_idx] >> msb_idx) & 1;
 
-        LE = (le_buf[led_idx] >> msb_idx) & 1;
+        LE = (led_idx == 16 && clk_cycle > 12) || clk_cycle > 14;
     }
 
     // channel 2 underflow interrupt
@@ -202,13 +202,7 @@ static void init(void) {
     PD5 = PAL_LOW;
 
     // write_configuration(0b1000010000000000u);
-    sdi_red_buf[14] = 0xFFFF;
-
-    for (int i = 0; i < 16; i++) {
-        le_buf[i] = DATA_LATCH;
-    }
-
-    le_buf[16] = GLOBAL_LATCH;
+    sdi_red_buf[0] = 0xFFFF;
 }
 
 static void flush(void) {}
