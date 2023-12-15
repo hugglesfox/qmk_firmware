@@ -26,33 +26,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define LE PD3
 #define DCLK PD4
 
-#define ROW_0_LED_COUNT 15
-#define ROW_1_LED_COUNT 15
-#define ROW_2_LED_COUNT 14
-#define ROW_3_LED_COUNT 12
-#define ROW_4_LED_COUNT 12
-
-// FIXME: Replace this with the actual keyboard config
 led_config_t g_led_config = { {
-  // Key Matrix to LED Index
-  {   5, NO_LED, NO_LED,   0 },
-  { NO_LED, NO_LED, NO_LED, NO_LED },
-  {   4, NO_LED, NO_LED,   1 },
-  {   3, NO_LED, NO_LED,   2 }
+    // Key Matrix to LED Index
+    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, NO_LED},
+    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, NO_LED},
+    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, NO_LED, 13, 14, NO_LED},
+    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, NO_LED, NO_LED },
+    { 0, 1, 2, NO_LED, NO_LED, 5, NO_LED, NO_LED, NO_LED, 9, 10, 11, 12, 13, 14, NO_LED },
 }, {
-  // LED Index to Physical Position
-  { 188,  16 }, { 187,  48 }, { 149,  64 }, { 112,  64 }, {  37,  48 }, {  38,  16 }
+    // LED Index to Physical Position
+    { 0, 32 }, { 16, 32 }, { 32, 32 }, { 48, 32 }, { 64, 32 }, { 80, 32 }, { 96, 32 }, { 113, 32 }, { 129, 32 }, { 145, 32 }, { 161, 32 }, { 177, 32 }, { 193, 32 }, { 209, 32 }, { 226, 32 }
 }, {
-  // LED Index to Flag
-  1, 4, 4, 4, 4, 1
+    // LED Index to Flag
+   4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4 
 } };
-
-#define DATA_LATCH 1
-#define GLOBAL_LATCH 7
 
 static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
-// 5 rows, 16 led channels + 1 for global latch per row
+// 16 led channels + 1 for global latch per row
 static uint16_t sdi_buf[17][3];
 
 // Takes 272 pulses to clock in all the data
@@ -265,16 +256,15 @@ static void init(void) {
     // Enable the LED controllers
     PD5 = PAL_LOW;
 
-    // write_configuration(0b1000010000000000u);
-
-    for (int j = 0; j < 15; j++) {
-        sdi_buf[j][0] = 0xFFFF;
-        sdi_buf[j][1] = 0xFFFF;
-        sdi_buf[j][2] = 0xFFFF;
-    }
 }
 
-static void flush(void) {}
+static void flush(void) {
+    for (int i = 0; i < RGB_MATRIX_LED_COUNT; i++) {
+        for (int j = 0; j < 3; j++) {
+            sdi_buf[i][j] = color_data[i][j];
+        }
+    }    
+}
 
 static void set_color(int index, uint8_t red, uint8_t green, uint8_t blue) {
     color_data[index][0] = red;
