@@ -53,9 +53,7 @@ led_config_t g_led_config = { {
 static uint8_t color_data[RGB_MATRIX_LED_COUNT][3];
 
 // 5 rows, 16 led channels + 1 for global latch per row
-static uint16_t sdi_red_buf[5][17];
-static uint16_t sdi_green_buf[5][17];
-static uint16_t sdi_blue_buf[5][17];
+static uint16_t sdi_buf[17][3];
 
 // Takes 272 pulses to clock in all the data
 static uint16_t dclk_pulse_count = 0;
@@ -84,7 +82,7 @@ static void setup_pwm(void) {
     PWMA->PPR |= 1 << PWM_PPR_CP01_Pos;
 
     // Set prescaler to for PWM2 and PWM3 to 100
-    PWMA->PPR |= 100 << PWM_PPR_CP23_Pos;
+    PWMA->PPR |= 250 << PWM_PPR_CP23_Pos;
 
     // Enable PWM interrupt vector
     // Interrupt priority value taken from chibios defaults
@@ -121,7 +119,7 @@ static void setup_gclk(void) {
 
 // PWM channel 2, DCLK
 static void setup_dclk(void) {
-    // Set clock division to 16
+    // Set clock division to 1
     PWMA->CSR |= 1 << PWM_CSR_CSR2_Pos;
 
     // Enable duty and reset interrupts
@@ -137,8 +135,8 @@ static void setup_dclk(void) {
     //
     // duty = (CMR+1)/(CNR+1)
     // (19 + 1 )/(9 + 1)
-    PWMA->CNR2 = 9;
-    PWMA->CMR2 = 4;
+    PWMA->CNR2 = 99;
+    PWMA->CMR2 = 49;
 
     // Start PWM channel 2
     PWMA->PCR |= 1 << PWM_PCR_CH2EN_Pos;
@@ -146,8 +144,8 @@ static void setup_dclk(void) {
 
 // PWM channel 3, used for changing the row
 static void setup_row_clk(void) {
-    // Set clock division to 16
-    PWMA->CSR |= 3 << PWM_CSR_CSR3_Pos;
+    // Set clock division to 1
+    PWMA->CSR |= 1 << PWM_CSR_CSR3_Pos;
 
     // Enable reset interrupts
     PWMA->PIER |= 1 << PWM_PIER_PWMIE3_Pos;
@@ -162,7 +160,7 @@ static void setup_row_clk(void) {
     //
     // duty = (CMR+1)/(CNR+1)
     // (1+1)/(3+1)
-    PWMA->CNR3 = 1799;
+    PWMA->CNR3 = 50;
     PWMA->CMR3 = 1;
 
     // Start PWM channel 3
@@ -205,40 +203,42 @@ static void select_row(int row) {
 
 OSAL_IRQ_HANDLER(NUC123_PWMA_HANDLER) {
     OSAL_IRQ_PROLOGUE();
+
+    // channel 2 duty interrupt, set data
+    if (((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1) & (~DCLK)) {
+        uint8_t led_idx = dclk_pulse_count / 16;
+        uint8_t clk_cycle = dclk_pulse_count % 16;
+
+        uint16_t *led = sdi_buf[led_idx];
+
+        SDI_RED = (led[0] >> clk_cycle) & 1;
+        SDI_GREEN = (led[1] >> clk_cycle) & 1;
+        SDI_BLUE = (led[2] >> clk_cycle) & 1;
+
+        LE = (led_idx == 16 && clk_cycle > 12) || clk_cycle > 14;
+    }
+
     // channel 2 underflow interrupt, inc clock
     if ((PWMA->PIIR >> PWM_PIIR_PWMIF2_Pos) & 1) {
         // Toggle dclk
         DCLK ^= 1;
 
-        // count each clock pulse [0,271]
-        dclk_pulse_count += 1 & DCLK;
-        dclk_pulse_count %= 272;
+        if (DCLK) {
+            // count each clock pulse [0,271]
+            dclk_pulse_count += 1;
+            dclk_pulse_count %= 272;
+        }
     }
 
-
-    // channel 2 duty interrupt, set data
-    if (((PWMA->PIIR >> PWM_PIIR_PWMDIF2_Pos) & 1) & ~DCLK) {
-        uint8_t led_idx = dclk_pulse_count / 16;
-        uint8_t clk_cycle = dclk_pulse_count % 16;
-        uint8_t msb_idx = 15 - clk_cycle;
-
-        SDI_RED = (sdi_red_buf[current_row][led_idx] >> msb_idx) & 1;
-        SDI_GREEN = (sdi_green_buf[current_row][led_idx] >> msb_idx) & 1;
-        SDI_BLUE = (sdi_blue_buf[current_row][led_idx] >> msb_idx) & 1;
-
-        LE = (led_idx == 16 && clk_cycle > 12) || clk_cycle > 14;
-
-    }
-
-    // channel 3 reset interrupt, inc row
-    if (((PWMA->PIIR >> PWM_PIIR_PWMIF3_Pos) & 1)) {
-            current_row++;
-            current_row %= 5;
-            select_row(current_row);
+    // channel 3 underflow interrupt, inc row
+    if ((PWMA->PIIR >> PWM_PIIR_PWMIF3_Pos) & 1) {
+        select_row(current_row);
+        current_row++;
+        current_row %= 5;
     }
 
     // Reset interrupt flags
-    PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos) | (1 << PWM_PIIR_PWMIF3_Pos);
+    PWMA->PIIR |= (1 << PWM_PIIR_PWMIF2_Pos) | (1 << PWM_PIIR_PWMDIF2_Pos);
 
     OSAL_IRQ_EPILOGUE();
 }
@@ -248,7 +248,7 @@ static void init(void) {
     PD5 = PAL_HIGH;
 
     // Disable all rows
-    select_row(0);
+    select_row(-1);
 
     // Reset all data lines
     LE = PAL_LOW;
@@ -267,21 +267,11 @@ static void init(void) {
 
     // write_configuration(0b1000010000000000u);
 
-    /* for (int i = 0; i < 5; i++) { */
-    /*     for (int j = 0; j < 15; j++) { */
-    /*         sdi_red_buf[i][j] = 0xFFFF; */
-    /*         sdi_green_buf[i][j] = 0xFFFF; */
-    /*         sdi_blue_buf[i][j] = 0xFFFF; */
-    /*     } */
-    /* } */
-
-    sdi_red_buf[0][0] = 0xFFFF;
-    sdi_green_buf[0][0] = 0xFFFF;
-    sdi_blue_buf[0][0] = 0xFFFF;
-
-    sdi_red_buf[0][14] = 0xFFFF;
-    sdi_green_buf[0][14] = 0xFFFF;
-    sdi_blue_buf[0][14] = 0xFFFF;
+    for (int j = 0; j < 15; j++) {
+        sdi_buf[j][0] = 0xFFFF;
+        sdi_buf[j][1] = 0xFFFF;
+        sdi_buf[j][2] = 0xFFFF;
+    }
 }
 
 static void flush(void) {}
